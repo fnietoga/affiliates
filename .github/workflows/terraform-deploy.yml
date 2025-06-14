@@ -1,0 +1,181 @@
+name: Terraform Deployment Reusable Workflow
+
+# Metadata to hide this workflow in GitHub UI
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#run-name
+run-name: false
+
+# This file is just a reusable module and should not be run directly
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: 'Environment name (Development or Production)'
+      environment_name:
+        required: true
+        type: string
+        description: 'Environment name in lowercase (development or production)'
+      config_file:
+        required: true
+        type: string
+        description: 'Terraform config file name'
+      backend_file:
+        required: true
+        type: string
+        description: 'Terraform backend config file name'
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      AZURE_TERRAFORM_STATE_RESOURCE_ID:
+        required: true
+
+# This workflow uses the same environment variables as the main workflow
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_USE_OIDC: true
+
+jobs:
+  deploy:
+    name: 'Deploy - ${{ inputs.environment }} Environment'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment_name }}
+    defaults:
+      run:
+        working-directory: ./iac/terraform
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    # Extract backend configuration for the environment
+    - name: Extract ${{ inputs.environment }} backend config
+      id: backend-config
+      run: |
+        # Get sensitive values directly from Resource ID
+        echo "Extracting sensitive values from AZURE_TERRAFORM_STATE_RESOURCE_ID"
+        RESOURCE_ID="${{ secrets.AZURE_TERRAFORM_STATE_RESOURCE_ID }}"
+        
+        # Extract components using awk directly in the workflow
+        resource_group_name=$(echo "$RESOURCE_ID" | awk -F'/' '{print $5}')
+        storage_account_name=$(echo "$RESOURCE_ID" | awk -F'/' '{print $9}')
+        
+        # Read only non-sensitive values from the backend config file
+        echo "Reading non-sensitive configuration from backend configuration file"
+        container=$(grep container_name ./backend/${{ inputs.backend_file }} | awk -F'=' '{print $2}' | tr -d ' "')
+        key=$(grep key ./backend/${{ inputs.backend_file }} | awk -F'=' '{print $2}' | tr -d ' "')
+        
+        echo "${{ inputs.environment }} Resource Group: $resource_group_name"
+        echo "${{ inputs.environment }} Storage Account: $storage_account_name"
+        echo "${{ inputs.environment }} Container: $container"
+        echo "${{ inputs.environment }} Key: $key"
+        
+        echo "resource_group=$resource_group_name" >> $GITHUB_OUTPUT
+        echo "storage_account=$storage_account_name" >> $GITHUB_OUTPUT
+        echo "container=$container" >> $GITHUB_OUTPUT
+        echo "key=$key" >> $GITHUB_OUTPUT
+
+    # Initialize with environment-specific backend configuration
+    - name: Terraform Init - ${{ inputs.environment }}
+      run: |
+        terraform init -upgrade -reconfigure \
+          -backend-config="resource_group_name=${{ steps.backend-config.outputs.resource_group }}" \
+          -backend-config="storage_account_name=${{ steps.backend-config.outputs.storage_account }}" \
+          -backend-config="container_name=${{ steps.backend-config.outputs.container }}" \
+          -backend-config="key=${{ steps.backend-config.outputs.key }}" \
+          -backend-config="use_azuread_auth=true"
+    
+    # Azure authentication using OIDC
+    - name: Azure Login with OIDC
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    # Extract Key Vault name from Terraform configuration
+    - name: Extract Key Vault Name
+      id: extract-keyvault
+      shell: pwsh
+      run: |
+        # Read config file and extract Key Vault name using PowerShell
+        $configFile = Get-Content -Path "./config/${{ inputs.config_file }}"
+        $keyVaultLine = $configFile | Where-Object { $_ -match "key_vault\s*=" }
+        $keyVaultName = $keyVaultLine -replace '.*key_vault\s*=\s*["''"]([^"'']*)["''"].*', '$1'
+        
+        echo "Found Key Vault: $keyVaultName"
+        echo "KEYVAULT_NAME=$keyVaultName" >> $env:GITHUB_ENV
+    
+    # Add GitHub Runner IP Key Vault
+    - name: Whitelist GitHub Runner IP for Key Vault
+      uses: azure/CLI@v1
+      with:
+        azcliversion: latest
+        inlineScript: |
+          set -eu
+          # Get the GitHub runner's IP address
+          agentIP=$(curl -s https://api.ipify.org/)
+          echo "GitHub runner IP: $agentIP" 
+
+          # Add the IP to the Key Vault network rules if the vault exists
+          echo "Checking if Key Vault $KEYVAULT_NAME exists..."
+          
+          # Check if the Key Vault exists before trying to modify its rules
+          if az keyvault show --name "$KEYVAULT_NAME" &>/dev/null; then
+            echo "Key Vault $KEYVAULT_NAME exists, adding IP to network rules"
+            az keyvault network-rule add \
+              --name "$KEYVAULT_NAME" \
+              --ip-address "$agentIP/32"
+              
+            # Wait for network changes to propagate
+            echo "Waiting for network changes to propagate..."
+            sleep 10
+          else
+            echo "Key Vault $KEYVAULT_NAME does not exist yet. Skipping network rule configuration."
+          fi
+          
+    # Generate plan for environment
+    - name: Terraform Plan - ${{ inputs.environment }}
+      run: terraform plan -var-file="./config/${{ inputs.config_file }}" -out=tfplan-${{ inputs.environment_name }}
+      
+    # Apply changes to environment
+    - name: Terraform Apply - ${{ inputs.environment }}
+      run: terraform apply -auto-approve tfplan-${{ inputs.environment_name }}
+    
+    # Remove GitHub Runner IP from Key Vault Whitelist
+    - name: Remove GitHub Runner IP from Key Vault Whitelist
+      if: always()
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          set -eu
+          agentIP=$(curl -s https://api.ipify.org/)
+          # Using the environment variable for Key Vault name
+          if [ -n "${KEYVAULT_NAME:-}" ]; then
+            echo "Checking if Key Vault $KEYVAULT_NAME exists..."
+            
+            # Check if the Key Vault exists before trying to remove rules
+            if az keyvault show --name "$KEYVAULT_NAME" &>/dev/null; then
+              echo "Removing IP from Key Vault: $KEYVAULT_NAME"
+              az keyvault network-rule remove \
+                --name "$KEYVAULT_NAME" \
+                --ip-address "$agentIP/32"
+            else
+              echo "Key Vault $KEYVAULT_NAME does not exist. Skipping whitelist removal."
+            fi
+          else
+            echo "Warning: KEYVAULT_NAME variable not found. Skipping whitelist removal."
+          fi

@@ -1,0 +1,63 @@
+name: Backend API
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '!backend/db/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '!backend/db/**'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'app-afiliados-api' }}
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy .NET API
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      working-directory: ./backend
+      
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+      working-directory: ./backend
+      
+    - name: Test
+      run: dotnet test --configuration Release --no-build --verbosity normal
+      working-directory: ./backend
+      continue-on-error: true
+      
+    - name: Publish
+      run: dotnet publish --configuration Release --output ./publish
+      working-directory: ./backend
+      
+    - name: Upload artifact for deployment job
+      uses: actions/upload-artifact@v3
+      with:
+        name: api-app
+        path: ./backend/publish
+        
+    - name: Deploy to Azure Web App
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: ./backend/publish
