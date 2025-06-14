@@ -74,4 +74,4 @@ This project uses GitHub Actions for continuous integration and deployment. The 
 3. **Backend API (.NET)**: Builds and deploys the ASP.NET Core API when changes are pushed to the `backend/` directory.
 4. **Frontend (React)**: Builds and deploys the React application when changes are pushed to the `frontend/` directory.
 
-GitHub Actions workflow files are located in the `.github/workflows/` directory.
+GitHub Actions workflow files are located in the `.github/workflows/` directory. 
