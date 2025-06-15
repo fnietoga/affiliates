@@ -2,56 +2,44 @@ name: Database Migration
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feat/*', 'fix/*' ]
     paths:
       - 'backend/db/migration/**'
+      - '.github/workflows/database*.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'backend/db/migration/**'
+      - '.github/workflows/database*.yml'
   workflow_dispatch:
 
+permissions:
+  actions: read           # Potentially needed for private repositories
+  id-token: write         # Required for OIDC authentication
+
 jobs:
-  migrate:
-    name: Run Flyway Migrations
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up JDK
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '17'
-        
-    - name: Install Flyway CLI
-      run: |
-        wget -qO- https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.22.3/flyway-commandline-9.22.3-linux-x64.tar.gz | tar xvz
-        sudo mv flyway-9.22.3 /opt/flyway
-        sudo ln -s /opt/flyway/flyway /usr/local/bin/flyway
-        
-    - name: Run Database Migrations
-      working-directory: ./backend/db
-      env:
-        FLYWAY_URL: ${{ secrets.FLYWAY_URL }}
-        FLYWAY_USER: ${{ secrets.FLYWAY_USER }}
-        FLYWAY_PASSWORD: ${{ secrets.FLYWAY_PASSWORD }}
-      run: |
-        # Create a temporary flyway.conf file with secrets
-        echo "flyway.url=${FLYWAY_URL}" > flyway-ci.conf
-        echo "flyway.user=${FLYWAY_USER}" >> flyway-ci.conf
-        echo "flyway.password=${FLYWAY_PASSWORD}" >> flyway-ci.conf
-        echo "flyway.locations=filesystem:migration" >> flyway-ci.conf
-        
-        # Run migrations with the temporary config file
-        flyway -configFiles=flyway-ci.conf info
-        
-        # Only apply migrations on main branch or manual workflow runs
-        if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-          flyway -configFiles=flyway-ci.conf migrate
-        fi
-        
-        # Clean up
-        rm flyway-ci.conf
+  # Deployment to development environment
+  migrate-dev:
+    name: 'Migrate Database - Development Environment'
+    uses: ./.github/workflows/database-deploy.yml
+    with:
+      environment: 'Development'
+      environment_name: 'development'
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # Deployment to production environment (requires manual approval)
+  migrate-prod:
+    name: 'Migrate Database - Production Environment'
+    needs: migrate-dev # Requires the development migration to complete first
+    # Environment protection rules handle approvals
+    uses: ./.github/workflows/database-deploy.yml
+    with:
+      environment: 'Production'
+      environment_name: 'production'
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

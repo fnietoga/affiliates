@@ -10,6 +10,7 @@ on:
     branches: [ main ]
     paths:
       - 'iac/terraform/**'
+      - '.github/workflows/terraform*.yml'
   workflow_dispatch:
 
 permissions:
@@ -115,7 +116,7 @@ jobs:
   deploy-prod:
     name: 'Deploy - Production Environment'
     needs: deploy-dev # Requires the development deployment to complete first
-    if: github.ref == 'refs/heads/main' # Only run on main branch
+    # Environment protection rules handle approvals
     uses: ./.github/workflows/terraform-deploy.yml
     with:
       environment: 'Production'

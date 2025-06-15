@@ -4,9 +4,9 @@
 # --- Azure SQL Server ---
 resource "azurerm_mssql_server" "sqlserver" {
   #checkov:skip=CKV_AZURE_113:Ensure that SQL server disables public network access
-  #checkov:skip=CKV2_AZURE_45:Ensure Microsoft SQL server is configured with private endpoint
   #checkov:skip=CKV_AZURE_23:Ensure that 'Auditing' is set to 'On' for SQL servers
   #checkov:skip=CKV_AZURE_24:Ensure that 'Auditing' Retention is 'greater than 90 days' for SQL servers
+  #checkov:skip=CKV2_AZURE_45:Ensure Microsoft SQL server is configured with private endpoint
   #checkov:skip=CKV2_AZURE_2:Ensure that Vulnerability Assessment (VA) is enabled on a SQL server by setting a Storage Account ##TODO
   name                                 = var.resource_names.sql_server
   resource_group_name                  = azurerm_resource_group.rg.name
@@ -15,13 +15,15 @@ resource "azurerm_mssql_server" "sqlserver" {
   minimum_tls_version                  = "1.2"
   public_network_access_enabled        = true
   outbound_network_restriction_enabled = true
+  administrator_login                  = var.sql_admin_login
+  administrator_login_password         = random_password.sql_admin_password.result
 
   # Enable Azure AD authentication using the administrators group
   azuread_administrator {
     login_username              = azuread_group.sql_admins.display_name
     object_id                   = azuread_group.sql_admins.object_id
     tenant_id                   = data.azurerm_client_config.current.tenant_id
-    azuread_authentication_only = true
+    azuread_authentication_only = false
   }
 
   tags = var.tags
@@ -39,16 +41,49 @@ resource "random_password" "sql_admin_password" {
   override_special = "!#$%&*()-_=+[]{}<>:?" # Avoid characters that might cause shell escaping issues
 }
 
-# --- Store the generated password in Key Vault ---
+# --- Store database credentials in Key Vault ---
+
+# Store SQL admin password
 resource "azurerm_key_vault_secret" "sql_admin_password" {
-  #checkov:skip=CKV_AZURE_114:Ensure that key vault secrets have "content_type" set
   #checkov:skip=CKV_AZURE_41:Ensure that the expiration date is set on all secrets
   name         = "sql-admin-password"
   value        = random_password.sql_admin_password.result
   key_vault_id = azurerm_key_vault.kv.id
+  content_type = "password"
 
   depends_on = [
-    azurerm_key_vault.kv
+    azurerm_key_vault.kv,
+    azurerm_role_assignment.kv_admin_role
+  ]
+}
+
+# Store SQL admin username
+resource "azurerm_key_vault_secret" "sql_admin_username" {
+  #checkov:skip=CKV_AZURE_41:Ensure that the expiration date is set on all secrets
+  name         = "sql-admin-username"
+  value        = var.sql_admin_login
+  key_vault_id = azurerm_key_vault.kv.id
+  content_type = "username"
+
+  depends_on = [
+    azurerm_key_vault.kv,
+    azurerm_role_assignment.kv_admin_role
+  ]
+}
+
+# Store JDBC connection string for Flyway
+resource "azurerm_key_vault_secret" "jdbc_connection_string" {
+  #checkov:skip=CKV_AZURE_41:Ensure that the expiration date is set on all secrets
+  name         = "jdbc-connection-string"
+  value        = "jdbc:sqlserver://${azurerm_mssql_server.sqlserver.fully_qualified_domain_name};databaseName=${azurerm_mssql_database.sqldb.name};encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;"
+  key_vault_id = azurerm_key_vault.kv.id
+  content_type = "jdbc-connection-string"
+
+  depends_on = [
+    azurerm_key_vault.kv,
+    azurerm_mssql_server.sqlserver,
+    azurerm_mssql_database.sqldb,
+    azurerm_role_assignment.kv_admin_role
   ]
 }
 
@@ -120,12 +155,13 @@ resource "azurerm_mssql_firewall_rule" "azure_backbone" {
   start_ip_address = "0.0.0.0"
   end_ip_address   = "0.0.0.0"
 }
-resource "azurerm_mssql_firewall_rule" "current_deployment_ip" {
-  name             = "CurrentDeploymentIP"
-  server_id        = azurerm_mssql_server.sqlserver.id
-  start_ip_address = local.current_deployment_ip
-  end_ip_address   = local.current_deployment_ip
-}
+# Removed after frist deployment to avoid continuous updates
+# resource "azurerm_mssql_firewall_rule" "current_deployment_ip" {
+#   name             = "CurrentDeploymentIP"
+#   server_id        = azurerm_mssql_server.sqlserver.id
+#   start_ip_address = local.current_deployment_ip
+#   end_ip_address   = local.current_deployment_ip
+# }
 resource "azurerm_mssql_firewall_rule" "allowed_ips" {
   count            = length(var.allowed_ip_addresses)
   name             = "AllowedIP-${count.index}"

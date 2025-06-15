@@ -5,18 +5,24 @@ This directory (`backend/db/`) contains the configuration and SQL migration scri
 ## Prerequisites
 
 1.  **Install Flyway CLI**:
-    *   Download the Flyway command-line tool from [flywaydb.org](https://flywaydb.org/documentation/usage/commandline#download-and-installation).
+    *   Download the Flyway command-line tool from [Red Gate's official Flyway installers page](https://documentation.red-gate.com/fd/installers-172490864.html).
     *   Unzip the downloaded file to a location on your system.
     *   Add the directory where you unzipped Flyway to your system's `PATH` environment variable so you can run the `flyway` command from any location.
 
-2.  **Configure Database Connection**:
-    *   Edit the `flyway.conf` file located in this same directory (`backend/db/`).
+1.  **JDBC Driver for Azure SQL Database**:
+    *   Flyway requires the appropriate JDBC driver to connect to your database. For Azure SQL Database (SQL Server), you need the Microsoft JDBC Driver for SQL Server.
+    *   The complete Flyway distribution typically includes this driver. If you're using the command-line version, ensure the Microsoft JDBC Driver (mssql-jdbc-*.jar) is available in the `drivers` directory of your Flyway installation.
+    *   If needed, you can download the latest version from [Microsoft's official JDBC Driver page](https://docs.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server).
+    *   For more information about Flyway command-line usage, refer to the [official documentation](https://documentation.red-gate.com/fd/command-line-277579359.html).
+
+3.  **Configure Database Connection**:
+    *   Edit the `flyway.conf` file located in this same directory (`backend/db/`). For detailed information about the configuration file format and options, refer to the [Flyway Configuration File Documentation](https://github.com/flyway/flywaydb.org/blob/gh-pages/documentation/configuration/configfile.md).
     *   Complete the following fields with your Azure SQL Database details (you will get these values after deploying the infrastructure with Terraform or if you already have an existing database):
         *   `flyway.url`: The JDBC connection string for your Azure SQL Database. Example:
             `jdbc:sqlserver://<your-server>.database.windows.net:1433;databaseName=<your-database>;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;`
         *   `flyway.user`: The username to access the database (e.g., the `sql_admin_login` you configured in Terraform).
         *   `flyway.password`: The password for the database user.
-            **SECURITY WARNING!** For production environments, do not store passwords in plain text directly in `flyway.conf`. Consider using environment variables. Flyway allows this, for example: `flyway.password=${env.FLYWAY_DB_PASSWORD}`. Then, you will need to define the `FLYWAY_DB_PASSWORD` environment variable on the system where you run Flyway.
+            **SECURITY WARNING!** For production environments, do not store passwords in plain text directly in `flyway.conf`. Consider using environment variables. Flyway allows this, for example: `flyway.password=${env.FLYWAY_PASSWORD}`. Then, you will need to define the `FLYWAY_PASSWORD` environment variable on the system where you run Flyway.
 
 ## Migration Scripts
 
