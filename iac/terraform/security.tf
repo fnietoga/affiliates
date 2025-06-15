@@ -14,18 +14,11 @@ resource "azurerm_key_vault" "kv" {
   soft_delete_retention_days = 7
   purge_protection_enabled   = false # Consider enabling for production
   sku_name                   = "standard"
+  enable_rbac_authorization  = true # Enable RBAC-based authorization
 
   tags = var.tags
 
-  # Access policy for the deployment identity
-  access_policy {
-    tenant_id = data.azurerm_client_config.current.tenant_id
-    object_id = data.azurerm_client_config.current.object_id
-
-    secret_permissions = [
-      "Get", "List", "Set", "Delete", "Purge", "Recover"
-    ]
-  }
+  # Access is now controlled via RBAC instead of access policies
   network_acls {
     default_action = "Deny"
     bypass         = "AzureServices"
@@ -34,4 +27,24 @@ resource "azurerm_key_vault" "kv" {
       [local.current_deployment_ip]
     )
   }
+}
+
+# --- RBAC role assignments for Key Vault ---
+
+# Assign Key Vault Administrator role to the deployment identity
+resource "azurerm_role_assignment" "kv_admin_role" {
+  scope                = azurerm_key_vault.kv.id
+  role_definition_name = "Key Vault Administrator"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+# Assign Key Vault Secrets Officer role to the backend app's managed identity
+resource "azurerm_role_assignment" "app_secrets_role" {
+  scope                = azurerm_key_vault.kv.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = azurerm_linux_web_app.backend_app.identity[0].principal_id
+
+  depends_on = [
+    azurerm_linux_web_app.backend_app
+  ]
 }
