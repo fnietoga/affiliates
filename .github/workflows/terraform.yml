@@ -6,11 +6,6 @@ on:
     paths:
       - 'iac/terraform/**'
       - '.github/workflows/terraform*.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'iac/terraform/**'
-      - '.github/workflows/terraform*.yml'
   workflow_dispatch:
 
 permissions:
@@ -116,8 +111,6 @@ jobs:
   deploy-prod:
     name: 'Deploy - Production Environment'
     needs: deploy-dev # Requires the development deployment to complete first
-    # Run when un pull request se fusiona o cuando es una ejecución manual
-    if: (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
     # Environment protection rules handle approvals
     uses: ./.github/workflows/terraform-deploy.yml
     with:
