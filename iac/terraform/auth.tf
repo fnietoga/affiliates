@@ -92,25 +92,27 @@ resource "azuread_application_password" "app" {
 
 # Store the app credentials in Key Vault
 resource "azurerm_key_vault_secret" "app_client_id" {
-  #checkov:skip=CKV_AZURE_114:Ensure that key vault secrets have "content_type" set
   #checkov:skip=CKV_AZURE_41:Ensure that the expiration date is set on all secrets
   name         = "app-client-id"
   value        = azuread_application.app.client_id
   key_vault_id = azurerm_key_vault.kv.id
+  content_type = "client-id"
 
   depends_on = [
-    azurerm_key_vault.kv
+    azurerm_key_vault.kv,
+    azurerm_role_assignment.kv_admin_role
   ]
 }
 
 resource "azurerm_key_vault_secret" "app_client_secret" {
-  #checkov:skip=CKV_AZURE_114:Ensure that key vault secrets have "content_type" set
   name            = "app-client-secret"
   value           = azuread_application_password.app.value
   key_vault_id    = azurerm_key_vault.kv.id
+  content_type    = "client-secret"
   expiration_date = time_rotating.app_expiration.id
 
   depends_on = [
-    azurerm_key_vault.kv
+    azurerm_key_vault.kv,
+    azurerm_role_assignment.kv_admin_role
   ]
 }

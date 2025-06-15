@@ -52,7 +52,8 @@ resource "azurerm_key_vault_secret" "sql_admin_password" {
   content_type = "password"
 
   depends_on = [
-    azurerm_key_vault.kv
+    azurerm_key_vault.kv,
+    azurerm_role_assignment.kv_admin_role
   ]
 }
 
@@ -65,7 +66,8 @@ resource "azurerm_key_vault_secret" "sql_admin_username" {
   content_type = "username"
 
   depends_on = [
-    azurerm_key_vault.kv
+    azurerm_key_vault.kv,
+    azurerm_role_assignment.kv_admin_role
   ]
 }
 
@@ -80,7 +82,8 @@ resource "azurerm_key_vault_secret" "jdbc_connection_string" {
   depends_on = [
     azurerm_key_vault.kv,
     azurerm_mssql_server.sqlserver,
-    azurerm_mssql_database.sqldb
+    azurerm_mssql_database.sqldb,
+    azurerm_role_assignment.kv_admin_role
   ]
 }
 
