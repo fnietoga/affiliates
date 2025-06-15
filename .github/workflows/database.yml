@@ -5,6 +5,10 @@ on:
     branches: [ main, 'feat/*', 'fix/*' ]
     paths:
       - 'backend/db/migration/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/db/migration/**'
   workflow_dispatch:
 
 permissions:

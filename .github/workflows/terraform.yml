@@ -5,6 +5,10 @@ on:
     branches: [ main, 'feat/*', 'fix/*' ]
     paths:
       - 'iac/terraform/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'iac/terraform/**'
   workflow_dispatch:
 
 permissions:
