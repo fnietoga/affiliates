@@ -10,6 +10,7 @@ on:
     branches: [ main ]
     paths:
       - 'iac/terraform/**'
+      - '.github/workflows/terraform*.yml'
   workflow_dispatch:
 
 permissions:

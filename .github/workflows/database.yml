@@ -2,13 +2,15 @@ name: Database Migration
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feat/*', 'fix/*' ]
     paths:
       - 'backend/db/migration/**'
+      - '.github/workflows/database.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'backend/db/migration/**'
+      - '.github/workflows/database.yml'
   workflow_dispatch:
 
 jobs:
