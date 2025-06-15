@@ -1,0 +1,163 @@
+name: 'Workflow Reusable for Database Migrations'
+
+# This is a reusable workflow that handles database migrations for different environments
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Environment name to display in GitHub UI (Development/Production)'
+        required: true
+        type: string
+      environment_name:
+        description: 'Environment name for GitHub environment (development/production)'
+        required: true
+        type: string
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+
+jobs:
+  database-migrations:
+    name: 'Run Migrations - ${{ inputs.environment }}'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        
+    - name: Install Flyway CLI
+      run: |
+        wget -qO- https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.22.3/flyway-commandline-9.22.3-linux-x64.tar.gz | tar xvz
+        sudo mv flyway-9.22.3 /opt/flyway
+        sudo ln -s /opt/flyway/flyway /usr/local/bin/flyway
+
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+    
+    # Azure authentication using OIDC
+    - name: Azure Login with OIDC
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    # Add GitHub Runner IP Key Vault
+    - name: Whitelist GitHub Runner IP for Key Vault
+      uses: azure/CLI@v1
+      with:
+        azcliversion: latest
+        inlineScript: |
+          set -eu
+          # Get the GitHub runner's IP address
+          agentIP=$(curl -s https://api.ipify.org/)
+          echo "GitHub runner IP: $agentIP"
+
+          # Get the Key Vault name from GitHub variables configured in the environment
+          KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
+          echo "Retrieving secrets from Key Vault: $KEYVAULT_NAME"
+
+          # Add the IP to the Key Vault network rules if the vault exists
+          echo "Checking if Key Vault $KEYVAULT_NAME exists..."
+          
+          # Check if the Key Vault exists before trying to modify its rules
+          if az keyvault show --name "$KEYVAULT_NAME" &>/dev/null; then
+            echo "Key Vault $KEYVAULT_NAME exists, adding IP to network rules"
+            az keyvault network-rule add \
+              --name "$KEYVAULT_NAME" \
+              --ip-address "$agentIP/32"
+              
+            # Wait for network changes to propagate
+            echo "Waiting for network changes to propagate..."
+            sleep 10
+          else
+            echo "Key Vault $KEYVAULT_NAME does not exist yet. Skipping network rule configuration."
+          fi
+
+    # Get secrets from Key Vault
+    - name: Get secrets from Key Vault
+      id: keyvault
+      run: |
+        # Get the Key Vault name from GitHub variables configured in the environment
+        KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
+        echo "Retrieving secrets from Key Vault: $KEYVAULT_NAME"
+        
+        # Get JDBC connection string
+        JDBC_CONNECTION=$(az keyvault secret show --name jdbc-connection-string --vault-name "$KEYVAULT_NAME" --query value -o tsv)
+        echo "::add-mask::$JDBC_CONNECTION"
+        echo "jdbc_connection=$JDBC_CONNECTION" >> $GITHUB_OUTPUT
+        
+        # Get SQL admin username
+        SQL_USERNAME=$(az keyvault secret show --name sql-admin-username --vault-name "$KEYVAULT_NAME" --query value -o tsv)
+        echo "::add-mask::$SQL_USERNAME"
+        echo "sql_username=$SQL_USERNAME" >> $GITHUB_OUTPUT
+        
+        # Get SQL admin password
+        SQL_PASSWORD=$(az keyvault secret show --name sql-admin-password --vault-name "$KEYVAULT_NAME" --query value -o tsv)
+        echo "::add-mask::$SQL_PASSWORD"
+        echo "sql_password=$SQL_PASSWORD" >> $GITHUB_OUTPUT
+        
+    - name: Run Database Migrations
+      working-directory: ./backend/db
+      env:
+        FLYWAY_URL: ${{ steps.keyvault.outputs.jdbc_connection }}
+        FLYWAY_USER: ${{ steps.keyvault.outputs.sql_username }}
+        FLYWAY_PASSWORD: ${{ steps.keyvault.outputs.sql_password }}
+      run: |
+        # Create a temporary flyway.conf file with secrets
+        echo "flyway.url=${FLYWAY_URL}" > flyway-ci.conf
+        echo "flyway.user=${FLYWAY_USER}" >> flyway-ci.conf
+        echo "flyway.password=${FLYWAY_PASSWORD}" >> flyway-ci.conf
+        echo "flyway.locations=filesystem:migration" >> flyway-ci.conf
+        
+        # Validate the migration scripts against this environment
+        echo "Validating migration scripts against ${{ inputs.environment }} environment..."
+        flyway -configFiles=flyway-ci.conf validate
+        
+        # First run info to show what migrations will be applied
+        echo "Showing pending migrations..."
+        flyway -configFiles=flyway-ci.conf info
+        
+        # Apply migrations
+        echo "Applying migrations to ${{ inputs.environment }} environment..."
+        flyway -configFiles=flyway-ci.conf migrate
+        
+        # Clean up
+        rm flyway-ci.conf
+
+    # Remove GitHub Runner IP from Key Vault Whitelist
+    - name: Remove GitHub Runner IP from Key Vault Whitelist
+      if: always()
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          set -eu
+          agentIP=$(curl -s https://api.ipify.org/)
+          # Using the environment variable for Key Vault name
+          if [ -n "${KEYVAULT_NAME:-}" ]; then
+            echo "Checking if Key Vault $KEYVAULT_NAME exists..."
+            
+            # Check if the Key Vault exists before trying to remove rules
+            if az keyvault show --name "$KEYVAULT_NAME" &>/dev/null; then
+              echo "Removing IP from Key Vault: $KEYVAULT_NAME"
+              az keyvault network-rule remove \
+                --name "$KEYVAULT_NAME" \
+                --ip-address "$agentIP/32"
+            else
+              echo "Key Vault $KEYVAULT_NAME does not exist. Skipping whitelist removal."
+            fi
+          else
+            echo "Warning: KEYVAULT_NAME variable not found. Skipping whitelist removal."
+          fi

@@ -1,11 +1,6 @@
-name: Terraform Deployment Reusable Workflow
-
-# Metadata to hide this workflow in GitHub UI
-# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#run-name
-run-name: false
+name: Workflow Reusable for Terraform Deployment
 
 # This file is just a reusable module and should not be run directly
-
 on:
   workflow_call:
     inputs:
@@ -118,8 +113,8 @@ jobs:
           echo "GitHub runner IP: $agentIP"
 
           # Get the Key Vault name from GitHub variables configured in the environment
-          KEY_VAULT_NAME="${{ vars.KEYVAULT_NAME }}"
-          echo "Retrieving secrets from Key Vault: $KEY_VAULT_NAME"
+          KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
+          echo "Retrieving secrets from Key Vault: $KEYVAULT_NAME"
 
           # Add the IP to the Key Vault network rules if the vault exists
           echo "Checking if Key Vault $KEYVAULT_NAME exists..."
