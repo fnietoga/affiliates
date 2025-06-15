@@ -6,11 +6,6 @@ on:
     paths:
       - 'iac/terraform/**'
       - '.github/workflows/terraform*.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'iac/terraform/**'
-      - '.github/workflows/terraform*.yml'
   workflow_dispatch:
 
 permissions:
