@@ -5,7 +5,10 @@ on:
     branches: [ main, 'feat/*', 'fix/*' ]
     paths:
       - 'iac/terraform/**'
-      - '.github/workflows/terraform*.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'iac/terraform/**'
   workflow_dispatch:
 
 permissions:
@@ -111,6 +114,8 @@ jobs:
   deploy-prod:
     name: 'Deploy - Production Environment'
     needs: deploy-dev # Requires the development deployment to complete first
+    if: github.event_name != 'pull_request'
+    
     # Environment protection rules handle approvals
     uses: ./.github/workflows/terraform-deploy.yml
     with:

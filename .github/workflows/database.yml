@@ -5,7 +5,10 @@ on:
     branches: [ main, 'feat/*', 'fix/*' ]
     paths:
       - 'backend/db/migration/**'
-      - '.github/workflows/database*.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/db/migration/**'
   workflow_dispatch:
 
 permissions:
@@ -29,6 +32,7 @@ jobs:
   migrate-prod:
     name: 'Migrate Database - Production Environment'
     needs: migrate-dev # Requires the development migration to complete first
+    if: github.event_name != 'pull_request'
     # Environment protection rules handle approvals
     uses: ./.github/workflows/database-deploy.yml
     with:
