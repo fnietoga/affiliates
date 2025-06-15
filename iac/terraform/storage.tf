@@ -20,10 +20,10 @@ resource "azurerm_storage_account" "backend" {
 
   network_rules {
     default_action = "Deny"
-    bypass         = ["AzureServices", "Logging", "Metrics"]
+    bypass         = ["AzureServices"]
     ip_rules = concat(
       var.allowed_ip_addresses,
-      [local.current_deployment_ip]
+      # [local.current_deployment_ip]
     )
   }
   # Enable blob service for logs
