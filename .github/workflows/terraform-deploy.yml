@@ -106,19 +106,6 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
-    # Extract Key Vault name from Terraform configuration
-    - name: Extract Key Vault Name
-      id: extract-keyvault
-      shell: pwsh
-      run: |
-        # Read config file and extract Key Vault name using PowerShell
-        $configFile = Get-Content -Path "./config/${{ inputs.config_file }}"
-        $keyVaultLine = $configFile | Where-Object { $_ -match "key_vault\s*=" }
-        $keyVaultName = $keyVaultLine -replace '.*key_vault\s*=\s*["''"]([^"'']*)["''"].*', '$1'
-        
-        echo "Found Key Vault: $keyVaultName"
-        echo "KEYVAULT_NAME=$keyVaultName" >> $env:GITHUB_ENV
-    
     # Add GitHub Runner IP Key Vault
     - name: Whitelist GitHub Runner IP for Key Vault
       uses: azure/CLI@v1
@@ -128,7 +115,11 @@ jobs:
           set -eu
           # Get the GitHub runner's IP address
           agentIP=$(curl -s https://api.ipify.org/)
-          echo "GitHub runner IP: $agentIP" 
+          echo "GitHub runner IP: $agentIP"
+
+          # Get the Key Vault name from GitHub variables configured in the environment
+          KEY_VAULT_NAME="${{ vars.KEYVAULT_NAME }}"
+          echo "Retrieving secrets from Key Vault: $KEY_VAULT_NAME"
 
           # Add the IP to the Key Vault network rules if the vault exists
           echo "Checking if Key Vault $KEYVAULT_NAME exists..."
