@@ -23,7 +23,7 @@ resource "azurerm_storage_account" "backend" {
     bypass         = ["AzureServices"]
     ip_rules = concat(
       var.allowed_ip_addresses,
-      # [local.current_deployment_ip]
+      # [local.current_deployment_ip] # Removed after frist deployment to avoid continuous updates
     )
   }
   # Enable blob service for logs

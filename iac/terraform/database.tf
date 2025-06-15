@@ -155,12 +155,13 @@ resource "azurerm_mssql_firewall_rule" "azure_backbone" {
   start_ip_address = "0.0.0.0"
   end_ip_address   = "0.0.0.0"
 }
-resource "azurerm_mssql_firewall_rule" "current_deployment_ip" {
-  name             = "CurrentDeploymentIP"
-  server_id        = azurerm_mssql_server.sqlserver.id
-  start_ip_address = local.current_deployment_ip
-  end_ip_address   = local.current_deployment_ip
-}
+# Removed after frist deployment to avoid continuous updates
+# resource "azurerm_mssql_firewall_rule" "current_deployment_ip" {
+#   name             = "CurrentDeploymentIP"
+#   server_id        = azurerm_mssql_server.sqlserver.id
+#   start_ip_address = local.current_deployment_ip
+#   end_ip_address   = local.current_deployment_ip
+# }
 resource "azurerm_mssql_firewall_rule" "allowed_ips" {
   count            = length(var.allowed_ip_addresses)
   name             = "AllowedIP-${count.index}"
