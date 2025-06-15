@@ -38,13 +38,9 @@ jobs:
         
     - name: Install Flyway CLI
       run: |
-        wget -qO- https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.22.3/flyway-commandline-9.22.3-linux-x64.tar.gz | tar xvz
-        sudo mv flyway-9.22.3 /opt/flyway
+        wget -qO- https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/11.9.1/flyway-commandline-11.9.1-linux-x64.tar.gz | tar xvz
+        sudo mv flyway-11.9.1 /opt/flyway
         sudo ln -s /opt/flyway/flyway /usr/local/bin/flyway
-
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
     
     # Azure authentication using OIDC
     - name: Azure Login with OIDC
@@ -57,6 +53,8 @@ jobs:
     # Add GitHub Runner IP Key Vault
     - name: Whitelist GitHub Runner IP for Key Vault
       uses: azure/CLI@v1
+      env:
+        KEYVAULT_NAME: ${{ vars.KEYVAULT_NAME }}
       with:
         azcliversion: latest
         inlineScript: |
@@ -65,8 +63,6 @@ jobs:
           agentIP=$(curl -s https://api.ipify.org/)
           echo "GitHub runner IP: $agentIP"
 
-          # Get the Key Vault name from GitHub variables configured in the environment
-          KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
           echo "Retrieving secrets from Key Vault: $KEYVAULT_NAME"
 
           # Add the IP to the Key Vault network rules if the vault exists
@@ -89,11 +85,11 @@ jobs:
     # Get secrets from Key Vault
     - name: Get secrets from Key Vault
       id: keyvault
+      env:
+        KEYVAULT_NAME: ${{ vars.KEYVAULT_NAME }}
       run: |
-        # Get the Key Vault name from GitHub variables configured in the environment
-        KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
         echo "Retrieving secrets from Key Vault: $KEYVAULT_NAME"
-        
+
         # Get JDBC connection string
         JDBC_CONNECTION=$(az keyvault secret show --name jdbc-connection-string --vault-name "$KEYVAULT_NAME" --query value -o tsv)
         echo "::add-mask::$JDBC_CONNECTION"
@@ -144,6 +140,8 @@ jobs:
     # Remove GitHub Runner IP from Key Vault Whitelist
     - name: Remove GitHub Runner IP from Key Vault Whitelist
       if: always()
+      env:
+        KEYVAULT_NAME: ${{ vars.KEYVAULT_NAME }}
       uses: azure/CLI@v1
       with:
         inlineScript: |

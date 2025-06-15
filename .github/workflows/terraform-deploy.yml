@@ -104,6 +104,8 @@ jobs:
     # Add GitHub Runner IP Key Vault
     - name: Whitelist GitHub Runner IP for Key Vault
       uses: azure/CLI@v1
+      env:
+        KEYVAULT_NAME: ${{ vars.KEYVAULT_NAME }}
       with:
         azcliversion: latest
         inlineScript: |
@@ -112,8 +114,6 @@ jobs:
           agentIP=$(curl -s https://api.ipify.org/)
           echo "GitHub runner IP: $agentIP"
 
-          # Get the Key Vault name from GitHub variables configured in the environment
-          KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
           echo "Retrieving secrets from Key Vault: $KEYVAULT_NAME"
 
           # Add the IP to the Key Vault network rules if the vault exists
@@ -145,6 +145,8 @@ jobs:
     - name: Remove GitHub Runner IP from Key Vault Whitelist
       if: always()
       uses: azure/CLI@v1
+      env:
+        KEYVAULT_NAME: ${{ vars.KEYVAULT_NAME }}
       with:
         inlineScript: |
           set -eu
