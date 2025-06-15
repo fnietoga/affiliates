@@ -41,16 +41,46 @@ resource "random_password" "sql_admin_password" {
   override_special = "!#$%&*()-_=+[]{}<>:?" # Avoid characters that might cause shell escaping issues
 }
 
-# --- Store the generated password in Key Vault ---
+# --- Store database credentials in Key Vault ---
+
+# Store SQL admin password
 resource "azurerm_key_vault_secret" "sql_admin_password" {
-  #checkov:skip=CKV_AZURE_114:Ensure that key vault secrets have "content_type" set
   #checkov:skip=CKV_AZURE_41:Ensure that the expiration date is set on all secrets
   name         = "sql-admin-password"
   value        = random_password.sql_admin_password.result
   key_vault_id = azurerm_key_vault.kv.id
+  content_type = "password"
 
   depends_on = [
     azurerm_key_vault.kv
+  ]
+}
+
+# Store SQL admin username
+resource "azurerm_key_vault_secret" "sql_admin_username" {
+  #checkov:skip=CKV_AZURE_41:Ensure that the expiration date is set on all secrets
+  name         = "sql-admin-username"
+  value        = var.sql_admin_login
+  key_vault_id = azurerm_key_vault.kv.id
+  content_type = "username"
+
+  depends_on = [
+    azurerm_key_vault.kv
+  ]
+}
+
+# Store JDBC connection string for Flyway
+resource "azurerm_key_vault_secret" "jdbc_connection_string" {
+  #checkov:skip=CKV_AZURE_41:Ensure that the expiration date is set on all secrets
+  name         = "jdbc-connection-string"
+  value        = "jdbc:sqlserver://${azurerm_mssql_server.sqlserver.fully_qualified_domain_name};databaseName=${azurerm_mssql_database.sqldb.name};encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;"
+  key_vault_id = azurerm_key_vault.kv.id
+  content_type = "jdbc-connection-string"
+
+  depends_on = [
+    azurerm_key_vault.kv,
+    azurerm_mssql_server.sqlserver,
+    azurerm_mssql_database.sqldb
   ]
 }
 
