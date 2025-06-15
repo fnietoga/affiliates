@@ -4,9 +4,9 @@
 # --- Azure SQL Server ---
 resource "azurerm_mssql_server" "sqlserver" {
   #checkov:skip=CKV_AZURE_113:Ensure that SQL server disables public network access
-  #checkov:skip=CKV2_AZURE_45:Ensure Microsoft SQL server is configured with private endpoint
   #checkov:skip=CKV_AZURE_23:Ensure that 'Auditing' is set to 'On' for SQL servers
   #checkov:skip=CKV_AZURE_24:Ensure that 'Auditing' Retention is 'greater than 90 days' for SQL servers
+  #checkov:skip=CKV2_AZURE_45:Ensure Microsoft SQL server is configured with private endpoint
   #checkov:skip=CKV2_AZURE_2:Ensure that Vulnerability Assessment (VA) is enabled on a SQL server by setting a Storage Account ##TODO
   name                                 = var.resource_names.sql_server
   resource_group_name                  = azurerm_resource_group.rg.name
@@ -15,13 +15,15 @@ resource "azurerm_mssql_server" "sqlserver" {
   minimum_tls_version                  = "1.2"
   public_network_access_enabled        = true
   outbound_network_restriction_enabled = true
+  administrator_login                  = var.sql_admin_login
+  administrator_login_password         = random_password.sql_admin_password.result
 
   # Enable Azure AD authentication using the administrators group
   azuread_administrator {
     login_username              = azuread_group.sql_admins.display_name
     object_id                   = azuread_group.sql_admins.object_id
     tenant_id                   = data.azurerm_client_config.current.tenant_id
-    azuread_authentication_only = true
+    azuread_authentication_only = false
   }
 
   tags = var.tags
