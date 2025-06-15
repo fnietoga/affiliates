@@ -124,7 +124,7 @@ jobs:
         
         # Validate the migration scripts against this environment
         echo "Validating migration scripts against ${{ inputs.environment }} environment..."
-        flyway -configFiles=flyway-ci.conf validate
+        flyway -configFiles=flyway-ci.conf validate -ignoreMigrationPatterns='*:pending'
         
         # First run info to show what migrations will be applied
         echo "Showing pending migrations..."
@@ -134,6 +134,10 @@ jobs:
         echo "Applying migrations to ${{ inputs.environment }} environment..."
         flyway -configFiles=flyway-ci.conf migrate
         
+        # Validate after apply migrations
+        echo "Validating applied migrations to ${{ inputs.environment }} environment..."
+        flyway -configFiles=flyway-ci.conf validate
+
         # Clean up
         rm flyway-ci.conf
 
