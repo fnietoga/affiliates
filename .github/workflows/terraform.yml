@@ -114,6 +114,8 @@ jobs:
   deploy-prod:
     name: 'Deploy - Production Environment'
     needs: deploy-dev # Requires the development deployment to complete first
+    if: github.event_name != 'pull_request'
+    
     # Environment protection rules handle approvals
     uses: ./.github/workflows/terraform-deploy.yml
     with:

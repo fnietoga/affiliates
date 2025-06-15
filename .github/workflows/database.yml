@@ -32,6 +32,7 @@ jobs:
   migrate-prod:
     name: 'Migrate Database - Production Environment'
     needs: migrate-dev # Requires the development migration to complete first
+    if: github.event_name != 'pull_request'
     # Environment protection rules handle approvals
     uses: ./.github/workflows/database-deploy.yml
     with:
