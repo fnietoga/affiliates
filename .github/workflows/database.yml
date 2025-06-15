@@ -34,6 +34,8 @@ jobs:
   migrate-prod:
     name: 'Migrate Database - Production Environment'
     needs: migrate-dev # Requires the development migration to complete first
+    # Only run on push to main, not on pull requests
+    if: github.event_name != 'pull_request'
     # Environment protection rules handle approvals
     uses: ./.github/workflows/database-deploy.yml
     with:
